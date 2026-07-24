@@ -1,6 +1,8 @@
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import { Box, type BoxProps } from '@mui/material';
 
+import { apiUrl } from '../api/client';
+
 export function ItemImage({
   src,
   alt,
@@ -14,7 +16,7 @@ export function ItemImage({
     return (
       <Box
         component="img"
-        src={src}
+        src={apiUrl(src)}
         alt={alt}
         loading="lazy"
         sx={{

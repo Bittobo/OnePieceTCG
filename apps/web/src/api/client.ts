@@ -1,5 +1,15 @@
 import type { ApiErrorPayload } from '@one-piece-tcg/shared';
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path}`;
+}
+
 export class ApiClientError extends Error {
   constructor(
     public readonly status: number,
@@ -13,7 +23,7 @@ export class ApiClientError extends Error {
 }
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await fetch(apiUrl(path), init);
   if (!response.ok) {
     let payload: ApiErrorPayload | undefined;
     try {
