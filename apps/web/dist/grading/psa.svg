@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 64" role="img" aria-labelledby="title">
+  <title id="title">PSA grading badge</title>
+  <rect width="160" height="64" rx="12" fill="#ffffff"/>
+  <path d="M12 47 35 17h25L37 47Z" fill="#e31b23"/>
+  <path d="M47 47 70 17h25L72 47Z" fill="#174a9c"/>
+  <text x="84" y="45" fill="#174a9c" font-family="Arial, sans-serif" font-size="31" font-weight="700">PSA</text>
+</svg>
