@@ -1,19 +1,19 @@
-import type { CardCollection } from '@one-piece-tcg/shared';
-import { Router } from 'express';
-import { Types } from 'mongoose';
-import { z } from 'zod';
+import type { CardCollection } from "@one-piece-tcg/shared";
+import { Router } from "express";
+import { Types } from "mongoose";
+import { z } from "zod";
 
-import { AppError } from '../errors/app-error.js';
-import { asyncHandler } from '../middleware/async-handler.js';
+import { AppError } from "../errors/app-error.js";
+import { asyncHandler } from "../middleware/async-handler.js";
 import {
   CardCollectionModel,
   normalizeCollectionName,
   type CardCollectionDocument,
-} from '../models/card-collection.js';
-import { ItemModel, toInventoryItem } from '../models/item.js';
+} from "../models/card-collection.js";
+import { ItemModel, toInventoryItem } from "../models/item.js";
 
 const collectionInputSchema = z.object({
-  name: z.string().trim().min(1, 'Collection name is required').max(80),
+  name: z.string().trim().min(1, "Collection name is required").max(80),
 });
 
 interface CollectionCountAggregate {
@@ -26,11 +26,16 @@ interface CollectionCoverAggregate {
   coverFileId?: Types.ObjectId;
 }
 
-type CollectionAggregate = CollectionCountAggregate & Partial<CollectionCoverAggregate>;
+type CollectionAggregate = CollectionCountAggregate &
+  Partial<CollectionCoverAggregate>;
 
 function parseObjectId(value: string | string[] | undefined): Types.ObjectId {
-  if (typeof value !== 'string' || !Types.ObjectId.isValid(value)) {
-    throw new AppError(400, 'invalid_id', 'The supplied collection ID is invalid');
+  if (typeof value !== "string" || !Types.ObjectId.isValid(value)) {
+    throw new AppError(
+      400,
+      "invalid_id",
+      "The supplied collection ID is invalid",
+    );
   }
   return new Types.ObjectId(value);
 }
@@ -51,13 +56,20 @@ async function collectionSummary(
   };
 }
 
-async function ensureUniqueName(name: string, excludedId?: Types.ObjectId): Promise<void> {
+async function ensureUniqueName(
+  name: string,
+  excludedId?: Types.ObjectId,
+): Promise<void> {
   const existing = await CardCollectionModel.exists({
     normalizedName: normalizeCollectionName(name),
     ...(excludedId ? { _id: { $ne: excludedId } } : {}),
   });
   if (existing) {
-    throw new AppError(409, 'collection_name_exists', 'A collection with this name already exists');
+    throw new AppError(
+      409,
+      "collection_name_exists",
+      "A collection with this name already exists",
+    );
   }
 }
 
@@ -65,10 +77,14 @@ export function createCollectionsRouter(): Router {
   const router = Router();
 
   router.get(
-    '/',
+    "/",
     asyncHandler(async (_request, response) => {
-      const collections = await CardCollectionModel.find().sort({ name: 1 }).exec();
-      const collectionIds = collections.map((collection) => collection._id.toHexString());
+      const collections = await CardCollectionModel.find()
+        .sort({ name: 1 })
+        .exec();
+      const collectionIds = collections.map((collection) =>
+        collection._id.toHexString(),
+      );
       const [counts, covers] =
         collectionIds.length === 0
           ? [[], []]
@@ -76,13 +92,13 @@ export function createCollectionsRouter(): Router {
               ItemModel.aggregate<CollectionCountAggregate>([
                 {
                   $match: {
-                    kind: 'card',
+                    kind: "card",
                     collectionId: { $in: collectionIds },
                   },
                 },
                 {
                   $group: {
-                    _id: '$collectionId',
+                    _id: "$collectionId",
                     cardCount: { $sum: 1 },
                   },
                 },
@@ -90,16 +106,17 @@ export function createCollectionsRouter(): Router {
               ItemModel.aggregate<CollectionCoverAggregate>([
                 {
                   $match: {
-                    kind: 'card',
+                    kind: "card",
                     collectionId: { $in: collectionIds },
-                    'image.fileId': { $exists: true, $ne: null },
+                    isOwned: true,
+                    "image.fileId": { $exists: true, $ne: null },
                   },
                 },
                 { $sort: { createdAt: -1 } },
                 {
                   $group: {
-                    _id: '$collectionId',
-                    coverFileId: { $first: '$image.fileId' },
+                    _id: "$collectionId",
+                    coverFileId: { $first: "$image.fileId" },
                   },
                 },
               ]),
@@ -110,7 +127,10 @@ export function createCollectionsRouter(): Router {
       }
       for (const cover of covers) {
         aggregatesById.set(cover._id, {
-          ...(aggregatesById.get(cover._id) ?? { _id: cover._id, cardCount: 0 }),
+          ...(aggregatesById.get(cover._id) ?? {
+            _id: cover._id,
+            cardCount: 0,
+          }),
           coverFileId: cover.coverFileId,
         });
       }
@@ -118,7 +138,10 @@ export function createCollectionsRouter(): Router {
       response.json({
         collections: await Promise.all(
           collections.map((collection) =>
-            collectionSummary(collection, aggregatesById.get(collection._id.toHexString())),
+            collectionSummary(
+              collection,
+              aggregatesById.get(collection._id.toHexString()),
+            ),
           ),
         ),
       });
@@ -126,17 +149,21 @@ export function createCollectionsRouter(): Router {
   );
 
   router.get(
-    '/:collectionId/cards',
+    "/:collectionId/cards",
     asyncHandler(async (request, response) => {
       const collection = await CardCollectionModel.findById(
         parseObjectId(request.params.collectionId),
       ).exec();
       if (!collection) {
-        throw new AppError(404, 'collection_not_found', 'Card collection not found');
+        throw new AppError(
+          404,
+          "collection_not_found",
+          "Card collection not found",
+        );
       }
 
       const cards = await ItemModel.find({
-        kind: 'card',
+        kind: "card",
         collectionId: collection._id.toHexString(),
       })
         .sort({ updatedAt: -1 })
@@ -147,17 +174,21 @@ export function createCollectionsRouter(): Router {
   );
 
   router.get(
-    '/:collectionId',
+    "/:collectionId",
     asyncHandler(async (request, response) => {
       const collection = await CardCollectionModel.findById(
         parseObjectId(request.params.collectionId),
       ).exec();
       if (!collection) {
-        throw new AppError(404, 'collection_not_found', 'Card collection not found');
+        throw new AppError(
+          404,
+          "collection_not_found",
+          "Card collection not found",
+        );
       }
 
       const cardCount = await ItemModel.countDocuments({
-        kind: 'card',
+        kind: "card",
         collectionId: collection._id.toHexString(),
       });
       response.json({
@@ -170,7 +201,7 @@ export function createCollectionsRouter(): Router {
   );
 
   router.post(
-    '/',
+    "/",
     asyncHandler(async (request, response) => {
       const { name } = collectionInputSchema.parse(request.body);
       await ensureUniqueName(name);
@@ -178,26 +209,33 @@ export function createCollectionsRouter(): Router {
         name,
         normalizedName: normalizeCollectionName(name),
       });
-      response.status(201).json({ collection: await collectionSummary(collection) });
+      response
+        .status(201)
+        .json({ collection: await collectionSummary(collection) });
     }),
   );
 
   router.patch(
-    '/:collectionId',
+    "/:collectionId",
     asyncHandler(async (request, response) => {
       const collectionId = parseObjectId(request.params.collectionId);
       const { name } = collectionInputSchema.parse(request.body);
       await ensureUniqueName(name, collectionId);
 
-      const collection = await CardCollectionModel.findById(collectionId).exec();
+      const collection =
+        await CardCollectionModel.findById(collectionId).exec();
       if (!collection) {
-        throw new AppError(404, 'collection_not_found', 'Card collection not found');
+        throw new AppError(
+          404,
+          "collection_not_found",
+          "Card collection not found",
+        );
       }
       collection.name = name;
       await collection.save();
 
       const cardCount = await ItemModel.countDocuments({
-        kind: 'card',
+        kind: "card",
         collectionId: collection._id.toHexString(),
       });
       response.json({
@@ -210,23 +248,28 @@ export function createCollectionsRouter(): Router {
   );
 
   router.delete(
-    '/:collectionId',
+    "/:collectionId",
     asyncHandler(async (request, response) => {
       const collectionId = parseObjectId(request.params.collectionId);
-      const collection = await CardCollectionModel.findById(collectionId).exec();
+      const collection =
+        await CardCollectionModel.findById(collectionId).exec();
       if (!collection) {
-        throw new AppError(404, 'collection_not_found', 'Card collection not found');
+        throw new AppError(
+          404,
+          "collection_not_found",
+          "Card collection not found",
+        );
       }
 
       const hasCards = await ItemModel.exists({
-        kind: 'card',
+        kind: "card",
         collectionId: collection._id.toHexString(),
       });
       if (hasCards) {
         throw new AppError(
           409,
-          'collection_not_empty',
-          'Move or delete the cards before deleting this collection',
+          "collection_not_empty",
+          "Move or delete the cards before deleting this collection",
         );
       }
 

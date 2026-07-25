@@ -1,18 +1,32 @@
-import type { InventoryItem, SealedSetGroup } from '@one-piece-tcg/shared';
+import type {
+  InventoryItem,
+  SealedSetGroup,
+  SealedSetPlaceholder,
+} from "@one-piece-tcg/shared";
 
 function normalize(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+function normalizeCode(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 function mergeGroups(target: SealedSetGroup, source: SealedSetGroup): void {
   target.setCode ??= source.setCode;
+  target.trackerId ??= source.trackerId;
   target.boxes.push(...source.boxes);
   target.packs.push(...source.packs);
-  target.isComplete = target.boxes.length > 0 && target.packs.length > 0;
+  target.isComplete =
+    target.boxes.some((item) => item.isOwned) &&
+    target.packs.some((item) => item.isOwned);
 }
 
 function setOrder(group: SealedSetGroup): [number, number, string] {
-  const code = (group.setCode ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const code = (group.setCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const families: Array<[RegExp, number]> = [
     [/^OP0*(\d+)/, 0],
     [/^EB0*(\d+)/, 1],
@@ -29,11 +43,14 @@ function setOrder(group: SealedSetGroup): [number, number, string] {
   return [3, Number.MAX_SAFE_INTEGER, group.setName];
 }
 
-export function groupSealedItems(items: InventoryItem[]): SealedSetGroup[] {
+export function groupSealedItems(
+  items: InventoryItem[],
+  placeholders: SealedSetPlaceholder[] = [],
+): SealedSetGroup[] {
   const groupsByName = new Map<string, SealedSetGroup>();
 
   for (const item of items) {
-    if (item.kind !== 'box' && item.kind !== 'pack') continue;
+    if (item.kind !== "box" && item.kind !== "pack") continue;
 
     const nameKey = normalize(item.setName);
     const group = groupsByName.get(nameKey) ?? {
@@ -45,10 +62,28 @@ export function groupSealedItems(items: InventoryItem[]): SealedSetGroup[] {
       isComplete: false,
     };
 
-    if (item.kind === 'box') group.boxes.push(item);
+    if (item.kind === "box") group.boxes.push(item);
     else group.packs.push(item);
     group.setCode ??= item.setCode;
-    group.isComplete = group.boxes.length > 0 && group.packs.length > 0;
+    group.isComplete =
+      group.boxes.some((entry) => entry.isOwned) &&
+      group.packs.some((entry) => entry.isOwned);
+    groupsByName.set(nameKey, group);
+  }
+
+  for (const placeholder of placeholders) {
+    const nameKey = normalize(placeholder.setName);
+    const group = groupsByName.get(nameKey) ?? {
+      key: nameKey,
+      setName: placeholder.setName,
+      setCode: placeholder.setCode,
+      trackerId: placeholder.id,
+      boxes: [],
+      packs: [],
+      isComplete: false,
+    };
+    group.setCode ??= placeholder.setCode;
+    group.trackerId ??= placeholder.id;
     groupsByName.set(nameKey, group);
   }
 
@@ -60,7 +95,7 @@ export function groupSealedItems(items: InventoryItem[]): SealedSetGroup[] {
       continue;
     }
 
-    const codeKey = normalize(group.setCode);
+    const codeKey = normalizeCode(group.setCode);
     const existing = groupsByCode.get(codeKey);
     if (existing) mergeGroups(existing, group);
     else groupsByCode.set(codeKey, { ...group, key: codeKey });
@@ -69,8 +104,12 @@ export function groupSealedItems(items: InventoryItem[]): SealedSetGroup[] {
   return [...groupsByCode.values(), ...groupsWithoutCode]
     .map((group) => ({
       ...group,
-      boxes: group.boxes.sort((left, right) => left.name.localeCompare(right.name)),
-      packs: group.packs.sort((left, right) => left.name.localeCompare(right.name)),
+      boxes: group.boxes.sort((left, right) =>
+        left.name.localeCompare(right.name),
+      ),
+      packs: group.packs.sort((left, right) =>
+        left.name.localeCompare(right.name),
+      ),
     }))
     .sort((left, right) => {
       const leftOrder = setOrder(left);

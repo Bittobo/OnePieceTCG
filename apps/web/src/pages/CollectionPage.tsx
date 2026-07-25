@@ -1,5 +1,5 @@
-import AddIcon from '@mui/icons-material/Add';
-import SearchIcon from '@mui/icons-material/Search';
+import AddIcon from "@mui/icons-material/Add";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   Box,
   Button,
@@ -11,21 +11,28 @@ import {
   Stack,
   TextField,
   Typography,
-} from '@mui/material';
-import { useMemo } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+} from "@mui/material";
+import { useMemo } from "react";
+import {
+  Link as RouterLink,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
-import { ErrorState } from '../components/ErrorState';
-import { LoadingState } from '../components/LoadingState';
-import { ItemCard } from '../features/inventory/ItemCard';
-import { filterCollectionCards } from '../features/inventory/localSearch';
-import { useCardCollection, useCollectionCards } from '../features/inventory/queries';
+import { ErrorState } from "../components/ErrorState";
+import { LoadingState } from "../components/LoadingState";
+import { ItemCard } from "../features/inventory/ItemCard";
+import { filterCollectionCards } from "../features/inventory/localSearch";
+import {
+  useCardCollection,
+  useCollectionCards,
+} from "../features/inventory/queries";
 
 export function CollectionPage() {
   const { collectionId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.get('search') ?? '';
-  const page = Number(searchParams.get('page') ?? 1);
+  const search = searchParams.get("search") ?? "";
+  const page = Number(searchParams.get("page") ?? 1);
   const collectionQuery = useCardCollection(collectionId);
   const cardsQuery = useCollectionCards(collectionId);
   const filteredCards = useMemo(
@@ -43,15 +50,20 @@ export function CollectionPage() {
   if (collectionQuery.isLoading || cardsQuery.isLoading) {
     return <LoadingState label="Opening collection..." />;
   }
-  if (collectionQuery.isError || cardsQuery.isError || !collectionQuery.data || !cardsQuery.data) {
+  if (
+    collectionQuery.isError ||
+    cardsQuery.isError ||
+    !collectionQuery.data ||
+    !cardsQuery.data
+  ) {
     return <ErrorState message="This card collection could not be loaded." />;
   }
 
   return (
     <Stack gap={3}>
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems={{ sm: 'center' }}
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ sm: "center" }}
         justifyContent="space-between"
         gap={2}
       >
@@ -76,9 +88,9 @@ export function CollectionPage() {
         value={search}
         onChange={(event) => {
           const next = new URLSearchParams(searchParams);
-          if (event.target.value) next.set('search', event.target.value);
-          else next.delete('search');
-          next.delete('page');
+          if (event.target.value) next.set("search", event.target.value);
+          else next.delete("search");
+          next.delete("page");
           setSearchParams(next);
         }}
         slotProps={{
@@ -97,7 +109,9 @@ export function CollectionPage() {
         <Card variant="outlined">
           <CardContent>
             <Typography variant="h5">
-              {search ? 'No cards match this search' : 'This collection is empty'}
+              {search
+                ? "No cards match this search"
+                : "This collection is empty"}
             </Typography>
             {!search ? (
               <Button
@@ -114,7 +128,7 @@ export function CollectionPage() {
       ) : (
         <Grid2 container spacing={2}>
           {displayedCards.map((item) => (
-            <Grid2 key={item.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+            <Grid2 key={item.id} size={{ xs: 12, sm: 6, md: 3, lg: 2.4 }}>
               <ItemCard item={item} />
             </Grid2>
           ))}
@@ -122,14 +136,14 @@ export function CollectionPage() {
       )}
 
       {totalPages > 1 ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+        <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
           <Pagination
             page={effectivePage}
             count={totalPages}
             color="primary"
             onChange={(_event, nextPage) => {
               const next = new URLSearchParams(searchParams);
-              next.set('page', String(nextPage));
+              next.set("page", String(nextPage));
               setSearchParams(next);
             }}
           />

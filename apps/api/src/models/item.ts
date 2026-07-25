@@ -4,8 +4,8 @@ import {
   type InventoryItem,
   type ItemInput,
   type ItemKind,
-} from '@one-piece-tcg/shared';
-import mongoose, { type HydratedDocument, Schema, Types } from 'mongoose';
+} from "@one-piece-tcg/shared";
+import mongoose, { type HydratedDocument, Schema, Types } from "mongoose";
 
 export interface StoredImage {
   fileId: Types.ObjectId;
@@ -14,13 +14,14 @@ export interface StoredImage {
   size: number;
 }
 
-type ItemSource = ItemInput['source'];
+type ItemSource = ItemInput["source"];
 
 export interface ItemRecord {
   kind: ItemKind;
   name: string;
   setName: string;
   setCode?: string;
+  isOwned: boolean;
   quantity: number;
   language: string;
   storageLocation?: string;
@@ -29,6 +30,7 @@ export interface ItemRecord {
   source?: ItemSource;
   image?: StoredImage;
   collectionId?: string;
+  isJapanese?: boolean;
   cardNumber?: string;
   rarity?: string;
   colors?: string[];
@@ -59,7 +61,7 @@ const imageSchema = new Schema<StoredImage>(
 
 const sourceSchema = new Schema<NonNullable<ItemSource>>(
   {
-    provider: { type: String, enum: ['tcgplayer'], required: true },
+    provider: { type: String, enum: ["tcgplayer"], required: true },
     productId: { type: Number, required: true, min: 1 },
     url: { type: String, required: true },
     importedAt: { type: String, required: true },
@@ -69,10 +71,16 @@ const sourceSchema = new Schema<NonNullable<ItemSource>>(
 
 const itemSchema = new Schema<ItemRecord>(
   {
-    kind: { type: String, enum: ['card', 'pack', 'box'], required: true, index: true },
+    kind: {
+      type: String,
+      enum: ["card", "pack", "box"],
+      required: true,
+      index: true,
+    },
     name: { type: String, required: true, trim: true, index: true },
     setName: { type: String, required: true, trim: true },
     setCode: { type: String, trim: true, index: true },
+    isOwned: { type: Boolean, required: true, default: true, index: true },
     quantity: { type: Number, required: true, min: 1 },
     language: { type: String, required: true, index: true },
     storageLocation: { type: String, trim: true },
@@ -81,6 +89,7 @@ const itemSchema = new Schema<ItemRecord>(
     source: sourceSchema,
     image: imageSchema,
     collectionId: { type: String, trim: true, index: true },
+    isJapanese: { type: Boolean, default: false, index: true },
     cardNumber: { type: String, trim: true, index: true },
     rarity: { type: String, trim: true },
     colors: { type: [String] },
@@ -106,20 +115,20 @@ itemSchema.index({ updatedAt: -1 });
 itemSchema.index({ kind: 1, setCode: 1 });
 itemSchema.index({ collectionId: 1, updatedAt: -1 });
 
-itemSchema.pre('validate', function validateDomainModel() {
+itemSchema.pre("validate", function validateDomainModel() {
   const result = itemInputSchema.safeParse(this.toObject());
   if (result.success) {
     return;
   }
 
   for (const issue of result.error.issues) {
-    this.invalidate(issue.path.join('.') || 'item', issue.message);
+    this.invalidate(issue.path.join(".") || "item", issue.message);
   }
 });
 
 export const ItemModel =
   (mongoose.models.Item as mongoose.Model<ItemRecord> | undefined) ??
-  mongoose.model<ItemRecord>('Item', itemSchema);
+  mongoose.model<ItemRecord>("Item", itemSchema);
 
 export type ItemDocument = HydratedDocument<ItemRecord>;
 
@@ -129,6 +138,7 @@ function inputFromRecord(record: ItemRecord): ItemInput {
     name: record.name,
     setName: record.setName,
     setCode: record.setCode,
+    isOwned: record.isOwned,
     quantity: record.quantity,
     language: record.language,
     storageLocation: record.storageLocation,
@@ -137,11 +147,12 @@ function inputFromRecord(record: ItemRecord): ItemInput {
     source: record.source,
   };
 
-  if (record.kind === 'card') {
+  if (record.kind === "card") {
     return itemInputSchema.parse({
       ...common,
-      kind: 'card',
+      kind: "card",
       collectionId: record.collectionId,
+      isJapanese: record.isJapanese,
       cardNumber: record.cardNumber,
       rarity: record.rarity,
       colors: record.colors,
@@ -154,10 +165,10 @@ function inputFromRecord(record: ItemRecord): ItemInput {
     });
   }
 
-  if (record.kind === 'pack') {
+  if (record.kind === "pack") {
     return itemInputSchema.parse({
       ...common,
-      kind: 'pack',
+      kind: "pack",
       productCode: record.productCode,
       isSealed: record.isSealed,
       packVariant: record.packVariant,
@@ -166,7 +177,7 @@ function inputFromRecord(record: ItemRecord): ItemInput {
 
   return itemInputSchema.parse({
     ...common,
-    kind: 'box',
+    kind: "box",
     productCode: record.productCode,
     boxType: record.boxType,
     isSealed: record.isSealed,

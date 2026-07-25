@@ -1,9 +1,12 @@
-import { itemInputSchema } from '@one-piece-tcg/shared';
+import { itemInputSchema } from "@one-piece-tcg/shared";
 
-import { loadEnvironmentFiles, parseConfig } from '../config/env.js';
-import { connectDatabase, disconnectDatabase } from '../db/connection.js';
-import { CardCollectionModel, normalizeCollectionName } from '../models/card-collection.js';
-import { ItemModel } from '../models/item.js';
+import { loadEnvironmentFiles, parseConfig } from "../config/env.js";
+import { connectDatabase, disconnectDatabase } from "../db/connection.js";
+import {
+  CardCollectionModel,
+  normalizeCollectionName,
+} from "../models/card-collection.js";
+import { ItemModel } from "../models/item.js";
 
 loadEnvironmentFiles();
 
@@ -12,16 +15,16 @@ async function seed(): Promise<void> {
   await connectDatabase(config.mongoUri);
 
   if ((await ItemModel.countDocuments()) > 0) {
-    console.log('Seed skipped because the collection already contains items.');
+    console.log("Seed skipped because the collection already contains items.");
     return;
   }
 
   const collection = await CardCollectionModel.findOneAndUpdate(
-    { normalizedName: normalizeCollectionName('Favorites') },
+    { normalizedName: normalizeCollectionName("Favorites") },
     {
       $setOnInsert: {
-        name: 'Favorites',
-        normalizedName: normalizeCollectionName('Favorites'),
+        name: "Favorites",
+        normalizedName: normalizeCollectionName("Favorites"),
       },
     },
     { upsert: true, new: true },
@@ -29,43 +32,47 @@ async function seed(): Promise<void> {
 
   const items = [
     itemInputSchema.parse({
-      kind: 'card',
+      kind: "card",
       collectionId: collection._id.toHexString(),
-      name: 'Monkey D. Luffy',
-      setName: 'Romance Dawn',
-      setCode: 'OP01',
+      isJapanese: false,
+      name: "Monkey D. Luffy",
+      setName: "Romance Dawn",
+      setCode: "OP01",
+      isOwned: true,
       quantity: 1,
-      language: 'English',
-      tags: ['favorite'],
-      cardNumber: 'OP01-003',
-      rarity: 'Leader',
-      colors: ['Red'],
-      cardType: 'Leader',
-      condition: 'Near Mint',
-      finish: 'Regular',
+      language: "English",
+      tags: ["favorite"],
+      cardNumber: "OP01-003",
+      rarity: "Leader",
+      colors: ["Red"],
+      cardType: "Leader",
+      condition: "Near Mint",
+      finish: "Regular",
       isGraded: false,
     }),
     itemInputSchema.parse({
-      kind: 'pack',
-      name: 'Wings of the Captain Booster Pack',
-      setName: 'Wings of the Captain',
-      setCode: 'OP06',
+      kind: "pack",
+      name: "Wings of the Captain Booster Pack",
+      setName: "Wings of the Captain",
+      setCode: "OP06",
+      isOwned: true,
       quantity: 3,
-      language: 'English',
-      tags: ['sealed'],
-      productCode: 'OP-06',
+      language: "English",
+      tags: ["sealed"],
+      productCode: "OP-06",
       isSealed: true,
     }),
     itemInputSchema.parse({
-      kind: 'box',
-      name: '500 Years in the Future Booster Box',
-      setName: '500 Years in the Future',
-      setCode: 'OP07',
+      kind: "box",
+      name: "500 Years in the Future Booster Box",
+      setName: "500 Years in the Future",
+      setCode: "OP07",
+      isOwned: true,
       quantity: 1,
-      language: 'English',
-      tags: ['sealed'],
-      productCode: 'OP-07',
-      boxType: 'Booster Box',
+      language: "English",
+      tags: ["sealed"],
+      productCode: "OP-07",
+      boxType: "Booster Box",
       isSealed: true,
       packsPerBox: 24,
     }),
@@ -77,7 +84,7 @@ async function seed(): Promise<void> {
 
 seed()
   .catch((error: unknown) => {
-    console.error('Seed failed', error);
+    console.error("Seed failed", error);
     process.exitCode = 1;
   })
   .finally(async () => {

@@ -1,58 +1,94 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-export const itemKinds = ['card', 'pack', 'box'] as const;
-export const languages = ['English', 'Japanese', 'Chinese', 'French', 'Other'] as const;
-export const cardColors = ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow', 'Other'] as const;
-export const cardTypes = ['Leader', 'Character', 'Event', 'Stage', 'Don', 'Other'] as const;
+export const itemKinds = ["card", "pack", "box"] as const;
+export const languages = [
+  "English",
+  "Japanese",
+  "Chinese",
+  "French",
+  "Other",
+] as const;
+export const cardColors = [
+  "Red",
+  "Green",
+  "Blue",
+  "Purple",
+  "Black",
+  "Yellow",
+  "Other",
+] as const;
+export const cardTypes = [
+  "Leader",
+  "Character",
+  "Event",
+  "Stage",
+  "Don",
+  "Other",
+] as const;
 export const cardConditions = [
-  'Mint',
-  'Near Mint',
-  'Lightly Played',
-  'Moderately Played',
-  'Heavily Played',
-  'Damaged',
+  "Mint",
+  "Near Mint",
+  "Lightly Played",
+  "Moderately Played",
+  "Heavily Played",
+  "Damaged",
 ] as const;
 export const cardFinishes = [
-  'Regular',
-  'Foil',
-  'Parallel',
-  'Alternate Art',
-  'Manga',
-  'Promo',
-  'Other',
+  "Regular",
+  "Foil",
+  "Parallel",
+  "Alternate Art",
+  "Manga",
+  "Promo",
+  "Other",
 ] as const;
-export const gradingCompanies = ['PSA', 'BGS', 'Other'] as const;
-export const psaGrades = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as const;
+export const gradingCompanies = ["PSA", "BGS", "Other"] as const;
+export const psaGrades = [
+  "10",
+  "9",
+  "8",
+  "7",
+  "6",
+  "5",
+  "4",
+  "3",
+  "2",
+  "1",
+] as const;
 export const bgsGrades = [
-  '1',
-  '1.5',
-  '2',
-  '2.5',
-  '3',
-  '3.5',
-  '4',
-  '4.5',
-  '5',
-  '5.5',
-  '6',
-  '6.5',
-  '7',
-  '7.5',
-  '8',
-  '8.5',
-  '9',
-  '9.5',
-  '10',
+  "10",
+  "9.5",
+  "9",
+  "8.5",
+  "8",
+  "7.5",
+  "7",
+  "6.5",
+  "6",
+  "5.5",
+  "5",
+  "4.5",
+  "4",
+  "3.5",
+  "3",
+  "2.5",
+  "2",
+  "1.5",
+  "1",
 ] as const;
 export const boxTypes = [
-  'Booster Box',
-  'Display',
-  'Starter Deck',
-  'Gift Collection',
-  'Case',
-  'Other',
+  "Booster Box",
+  "Display",
+  "Starter Deck",
+  "Gift Collection",
+  "Case",
+  "Other",
 ] as const;
-export const itemSortOptions = ['updated-desc', 'name-asc', 'quantity-desc'] as const;
+export const itemSortOptions = [
+  "updated-desc",
+  "name-asc",
+  "quantity-desc",
+] as const;
 
 const requiredText = (label: string, maximum = 120) =>
   z.string().trim().min(1, `${label} is required`).max(maximum);
@@ -66,20 +102,21 @@ const optionalText = (maximum = 120) =>
     .transform((value) => value || undefined);
 
 export const itemSourceSchema = z.object({
-  provider: z.literal('tcgplayer'),
+  provider: z.literal("tcgplayer"),
   productId: z.number().int().positive(),
   url: z.string().url(),
   importedAt: z.string().datetime(),
 });
 
 const commonFields = {
-  name: requiredText('Name'),
-  setName: requiredText('Set name'),
+  name: requiredText("Name"),
+  setName: requiredText("Set name"),
   setCode: optionalText(40),
+  isOwned: z.boolean(),
   quantity: z.number().int().min(1).max(100_000),
   language: z.enum(languages),
   storageLocation: optionalText(120),
-  tags: z.array(requiredText('Tag', 40)).max(20).default([]),
+  tags: z.array(requiredText("Tag", 40)).max(20).default([]),
   notes: optionalText(2_000),
   source: itemSourceSchema.optional(),
 };
@@ -103,49 +140,58 @@ function validateCardGrading(
   if (!grading.grader) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['grader'],
-      message: 'Grading company is required for a graded card',
+      path: ["grader"],
+      message: "Grading company is required for a graded card",
     });
   }
   if (!grading.grade) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['grade'],
-      message: 'Grade is required for a graded card',
+      path: ["grade"],
+      message: "Grade is required for a graded card",
     });
     return;
   }
   if (
-    grading.grader === 'PSA' &&
+    grading.grader === "PSA" &&
     !psaGrades.includes(grading.grade as (typeof psaGrades)[number])
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['grade'],
-      message: 'PSA grades must be whole numbers from 1 to 10',
+      path: ["grade"],
+      message: "PSA grades must be whole numbers from 1 to 10",
     });
   }
   if (
-    grading.grader === 'BGS' &&
+    grading.grader === "BGS" &&
     !bgsGrades.includes(grading.grade as (typeof bgsGrades)[number])
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['grade'],
-      message: 'BGS grades must be from 1 to 10 in half-point steps',
+      path: ["grade"],
+      message: "BGS grades must be from 1 to 10 in half-point steps",
     });
   }
 }
 
-export const cardGradingSchema = z.object(gradingFields).superRefine(validateCardGrading);
+export const cardGradingSchema = z
+  .object(gradingFields)
+  .superRefine(validateCardGrading);
+export const cardJapaneseSchema = z.object({
+  isJapanese: z.boolean(),
+});
+export const itemOwnershipSchema = z.object({
+  isOwned: z.boolean(),
+});
 
 const cardInputSchema = z.object({
   ...commonFields,
-  kind: z.literal('card'),
-  collectionId: requiredText('Collection', 60),
-  cardNumber: requiredText('Card number', 60),
-  rarity: requiredText('Rarity', 60),
-  colors: z.array(z.enum(cardColors)).min(1, 'Choose at least one color'),
+  kind: z.literal("card"),
+  collectionId: requiredText("Collection", 60),
+  isJapanese: z.boolean(),
+  cardNumber: requiredText("Card number", 60),
+  rarity: requiredText("Rarity", 60),
+  colors: z.array(z.enum(cardColors)).min(1, "Choose at least one color"),
   cardType: z.enum(cardTypes),
   condition: z.enum(cardConditions),
   finish: z.enum(cardFinishes),
@@ -154,7 +200,7 @@ const cardInputSchema = z.object({
 
 const packInputSchema = z.object({
   ...commonFields,
-  kind: z.literal('pack'),
+  kind: z.literal("pack"),
   productCode: optionalText(60),
   isSealed: z.boolean(),
   packVariant: optionalText(120),
@@ -162,29 +208,35 @@ const packInputSchema = z.object({
 
 const boxInputSchema = z.object({
   ...commonFields,
-  kind: z.literal('box'),
+  kind: z.literal("box"),
   productCode: optionalText(60),
   boxType: z.enum(boxTypes),
   isSealed: z.boolean(),
   packsPerBox: z.number().int().positive().max(1_000).optional(),
 });
 
-export const tcgplayerImportedItemSchema = z.discriminatedUnion('kind', [
+export const tcgplayerImportedItemSchema = z.discriminatedUnion("kind", [
   cardInputSchema.omit({ collectionId: true }),
   packInputSchema,
   boxInputSchema,
 ]);
 
 export const itemInputSchema = z
-  .discriminatedUnion('kind', [cardInputSchema, packInputSchema, boxInputSchema])
+  .discriminatedUnion("kind", [
+    cardInputSchema,
+    packInputSchema,
+    boxInputSchema,
+  ])
   .superRefine((item, context) => {
-    if (item.kind === 'card') validateCardGrading(item, context);
+    if (item.kind === "card") validateCardGrading(item, context);
   });
 
 export type ItemKind = (typeof itemKinds)[number];
 export type ItemInput = z.infer<typeof itemInputSchema>;
 export type TcgplayerImportedItem = z.infer<typeof tcgplayerImportedItemSchema>;
 export type CardGrading = z.infer<typeof cardGradingSchema>;
+export type CardJapaneseStatus = z.infer<typeof cardJapaneseSchema>;
+export type ItemOwnershipStatus = z.infer<typeof itemOwnershipSchema>;
 export const imageReferenceSchema = z.object({
   fileId: z.string(),
   originalName: z.string(),
@@ -206,7 +258,7 @@ export type ItemSort = (typeof itemSortOptions)[number];
 
 export interface ItemListFilters {
   search?: string;
-  kind?: ItemKind | 'sealed';
+  kind?: ItemKind | "sealed";
   collectionId?: string;
   setCode?: string;
   language?: string;
@@ -242,10 +294,17 @@ export interface TcgplayerImportResult {
   warnings: string[];
 }
 
+export interface TcgplayerCardSearchResponse {
+  code: string;
+  results: TcgplayerImportResult[];
+  warnings: string[];
+}
+
 export interface SealedSetGroup {
   key: string;
   setName: string;
   setCode?: string;
+  trackerId?: string;
   boxes: InventoryItem[];
   packs: InventoryItem[];
   isComplete: boolean;
@@ -253,6 +312,12 @@ export interface SealedSetGroup {
 
 export interface SealedSetsResponse {
   groups: SealedSetGroup[];
+}
+
+export interface SealedSetPlaceholder {
+  id: string;
+  setName: string;
+  setCode: string;
 }
 
 export interface ApiErrorPayload {

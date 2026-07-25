@@ -88,9 +88,29 @@ The seed command does nothing when the collection already contains records.
 Open **Import**, paste a One Piece TCGplayer product URL, and select **Load product**. The app loads
 the product name, set, card or sealed-product details, description, and image.
 
+Cards can also be searched by exact card code, such as `OP12-091`. The app searches the matching
+One Piece set family and displays all available TCGplayer printings so one can be selected before
+saving.
+
 For cards, select one of the existing named collections. Boxes and packs require no collection.
 Nothing is saved until the final add button is selected. The API then downloads the image into
 GridFS and keeps a link to the original TCGplayer page.
+
+Before adding a card, it can be marked as Japanese and/or graded. Graded cards support PSA, BGS,
+or another company plus the grade. Japanese cards display a `JP` badge in collection grids.
+Every saved card also has an immediate Japanese toggle on its detail page. Turning it on marks the
+card as Japanese and sets its language to Japanese; turning it off clears the JP status.
+
+Every imported card, box, or pack can also be saved as **Owned** or **Missing**. Missing cards stay
+inside their selected collection with a red background and Missing label. A missing sealed product
+keeps its set visible while the corresponding Box/Pack half renders as a red skeleton. If neither
+half is owned, the entire set card receives a red **Nothing owned** state. Ownership can be changed
+later from any item detail page.
+
+The **Track missing set** action creates a set-only tracker with no box or pack records, so both
+halves remain red skeletons. Released booster-family sets were compared against TCGplayer's catalog;
+EB-01 Memorial Collection is tracked this way because it was the only released OP/EB/PRB set absent
+from the collection. PSA and BGS grade dropdowns list grades from 10 down to 1.
 
 This optional lookup requires internet access and depends on TCGplayer's current public product
 page data.

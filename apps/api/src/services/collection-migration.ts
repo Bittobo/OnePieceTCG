@@ -1,96 +1,116 @@
-import { CardCollectionModel, normalizeCollectionName } from '../models/card-collection.js';
-import { ItemModel } from '../models/item.js';
+import {
+  CardCollectionModel,
+  normalizeCollectionName,
+} from "../models/card-collection.js";
+import { ItemModel } from "../models/item.js";
 
-const legacyCollectionName = 'Unsorted';
+const legacyCollectionName = "Unsorted";
 
 export async function assignLegacyCardsToCollection(): Promise<void> {
-  await ItemModel.collection.updateMany({ kind: 'card' }, [
+  await ItemModel.collection.updateMany(
+    {
+      $or: [{ isOwned: { $exists: false } }, { isOwned: null }],
+    },
+    { $set: { isOwned: true } },
+  );
+
+  await ItemModel.collection.updateMany({ kind: "card" }, [
     {
       $set: {
-        quantity: { $ifNull: ['$quantity', 1] },
-        language: { $ifNull: ['$language', 'English'] },
-        tags: { $ifNull: ['$tags', []] },
+        quantity: { $ifNull: ["$quantity", 1] },
+        language: { $ifNull: ["$language", "English"] },
+        tags: { $ifNull: ["$tags", []] },
         cardNumber: {
-          $ifNull: ['$cardNumber', { $concat: ['legacy-', { $toString: '$_id' }] }],
+          $ifNull: [
+            "$cardNumber",
+            { $concat: ["legacy-", { $toString: "$_id" }] },
+          ],
         },
-        rarity: { $ifNull: ['$rarity', 'Unknown'] },
+        rarity: { $ifNull: ["$rarity", "Unknown"] },
         colors: {
-          $cond: [{ $gt: [{ $size: { $ifNull: ['$colors', []] } }, 0] }, '$colors', ['Other']],
+          $cond: [
+            { $gt: [{ $size: { $ifNull: ["$colors", []] } }, 0] },
+            "$colors",
+            ["Other"],
+          ],
         },
-        cardType: { $ifNull: ['$cardType', 'Other'] },
-        condition: { $ifNull: ['$condition', 'Near Mint'] },
-        finish: { $ifNull: ['$finish', 'Regular'] },
-        isGraded: { $ifNull: ['$isGraded', false] },
+        cardType: { $ifNull: ["$cardType", "Other"] },
+        condition: { $ifNull: ["$condition", "Near Mint"] },
+        finish: { $ifNull: ["$finish", "Regular"] },
+        isJapanese: {
+          $ifNull: ["$isJapanese", { $eq: ["$language", "Japanese"] }],
+        },
+        isGraded: { $ifNull: ["$isGraded", false] },
         grader: {
           $cond: [
-            { $eq: [{ $ifNull: ['$isGraded', false] }, true] },
+            { $eq: [{ $ifNull: ["$isGraded", false] }, true] },
             {
               $cond: [
                 {
                   $and: [
-                    { $eq: ['$grader', 'PSA'] },
+                    { $eq: ["$grader", "PSA"] },
                     {
                       $in: [
-                        { $toString: '$grade' },
-                        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+                        { $toString: "$grade" },
+                        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
                       ],
                     },
                   ],
                 },
-                'PSA',
+                "PSA",
                 {
                   $cond: [
                     {
                       $and: [
-                        { $eq: ['$grader', 'BGS'] },
+                        { $eq: ["$grader", "BGS"] },
                         {
                           $in: [
-                            { $toString: '$grade' },
+                            { $toString: "$grade" },
                             [
-                              '1',
-                              '1.5',
-                              '2',
-                              '2.5',
-                              '3',
-                              '3.5',
-                              '4',
-                              '4.5',
-                              '5',
-                              '5.5',
-                              '6',
-                              '6.5',
-                              '7',
-                              '7.5',
-                              '8',
-                              '8.5',
-                              '9',
-                              '9.5',
-                              '10',
+                              "1",
+                              "1.5",
+                              "2",
+                              "2.5",
+                              "3",
+                              "3.5",
+                              "4",
+                              "4.5",
+                              "5",
+                              "5.5",
+                              "6",
+                              "6.5",
+                              "7",
+                              "7.5",
+                              "8",
+                              "8.5",
+                              "9",
+                              "9.5",
+                              "10",
                             ],
                           ],
                         },
                       ],
                     },
-                    'BGS',
-                    'Other',
+                    "BGS",
+                    "Other",
                   ],
                 },
               ],
             },
-            '$$REMOVE',
+            "$$REMOVE",
           ],
         },
         grade: {
           $cond: [
-            { $eq: [{ $ifNull: ['$isGraded', false] }, true] },
+            { $eq: [{ $ifNull: ["$isGraded", false] }, true] },
             {
               $cond: [
-                { $ne: [{ $ifNull: ['$grade', ''] }, ''] },
-                { $toString: '$grade' },
-                'Unknown',
+                { $ne: [{ $ifNull: ["$grade", ""] }, ""] },
+                { $toString: "$grade" },
+                "Unknown",
               ],
             },
-            '$$REMOVE',
+            "$$REMOVE",
           ],
         },
       },
@@ -98,8 +118,12 @@ export async function assignLegacyCardsToCollection(): Promise<void> {
   ]);
 
   const legacyCardCount = await ItemModel.countDocuments({
-    kind: 'card',
-    $or: [{ collectionId: { $exists: false } }, { collectionId: null }, { collectionId: '' }],
+    kind: "card",
+    $or: [
+      { collectionId: { $exists: false } },
+      { collectionId: null },
+      { collectionId: "" },
+    ],
   });
 
   if (legacyCardCount === 0) {
@@ -122,8 +146,12 @@ export async function assignLegacyCardsToCollection(): Promise<void> {
 
   await ItemModel.updateMany(
     {
-      kind: 'card',
-      $or: [{ collectionId: { $exists: false } }, { collectionId: null }, { collectionId: '' }],
+      kind: "card",
+      $or: [
+        { collectionId: { $exists: false } },
+        { collectionId: null },
+        { collectionId: "" },
+      ],
     },
     {
       $set: {
@@ -132,5 +160,7 @@ export async function assignLegacyCardsToCollection(): Promise<void> {
     },
   );
 
-  console.log(`Moved ${legacyCardCount} legacy card records into "${legacyCollectionName}".`);
+  console.log(
+    `Moved ${legacyCardCount} legacy card records into "${legacyCollectionName}".`,
+  );
 }

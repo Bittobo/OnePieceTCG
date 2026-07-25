@@ -1,44 +1,51 @@
 import type {
   CardGrading,
+  CardJapaneseStatus,
   CardCollection,
   InventoryItem,
   ItemInput,
   ItemListFilters,
+  ItemOwnershipStatus,
   PaginatedItems,
   SealedSetsResponse,
+  TcgplayerCardSearchResponse,
   TcgplayerImportResult,
-} from '@one-piece-tcg/shared';
+} from "@one-piece-tcg/shared";
 
-import { apiRequest } from './client';
+import { apiRequest } from "./client";
 
 function appendIfPresent(
   searchParams: URLSearchParams,
   key: string,
   value: string | number | boolean | undefined,
 ): void {
-  if (value !== undefined && value !== '') {
+  if (value !== undefined && value !== "") {
     searchParams.set(key, String(value));
   }
 }
 
-export async function getItems(filters: ItemListFilters): Promise<PaginatedItems> {
+export async function getItems(
+  filters: ItemListFilters,
+): Promise<PaginatedItems> {
   const searchParams = new URLSearchParams();
-  appendIfPresent(searchParams, 'search', filters.search);
-  appendIfPresent(searchParams, 'kind', filters.kind);
-  appendIfPresent(searchParams, 'collectionId', filters.collectionId);
-  appendIfPresent(searchParams, 'setCode', filters.setCode);
-  appendIfPresent(searchParams, 'language', filters.language);
-  appendIfPresent(searchParams, 'condition', filters.condition);
-  appendIfPresent(searchParams, 'sealed', filters.sealed);
-  appendIfPresent(searchParams, 'sort', filters.sort);
-  appendIfPresent(searchParams, 'page', filters.page);
-  appendIfPresent(searchParams, 'pageSize', filters.pageSize);
+  appendIfPresent(searchParams, "search", filters.search);
+  appendIfPresent(searchParams, "kind", filters.kind);
+  appendIfPresent(searchParams, "collectionId", filters.collectionId);
+  appendIfPresent(searchParams, "setCode", filters.setCode);
+  appendIfPresent(searchParams, "language", filters.language);
+  appendIfPresent(searchParams, "condition", filters.condition);
+  appendIfPresent(searchParams, "sealed", filters.sealed);
+  appendIfPresent(searchParams, "sort", filters.sort);
+  appendIfPresent(searchParams, "page", filters.page);
+  appendIfPresent(searchParams, "pageSize", filters.pageSize);
 
   return apiRequest<PaginatedItems>(`/api/items?${searchParams.toString()}`);
 }
 
 export async function getItem(itemId: string): Promise<InventoryItem> {
-  const response = await apiRequest<{ item: InventoryItem }>(`/api/items/${itemId}`);
+  const response = await apiRequest<{ item: InventoryItem }>(
+    `/api/items/${itemId}`,
+  );
   return response.item;
 }
 
@@ -48,9 +55,9 @@ function mutationBody(
   remoteImageUrl: string | undefined,
 ): FormData {
   const formData = new FormData();
-  formData.set('payload', JSON.stringify({ item, remoteImageUrl }));
+  formData.set("payload", JSON.stringify({ item, remoteImageUrl }));
   if (image) {
-    formData.set('image', image);
+    formData.set("image", image);
   }
   return formData;
 }
@@ -60,8 +67,8 @@ export async function createItem(
   image?: File,
   remoteImageUrl?: string,
 ): Promise<InventoryItem> {
-  const response = await apiRequest<{ item: InventoryItem }>('/api/items', {
-    method: 'POST',
+  const response = await apiRequest<{ item: InventoryItem }>("/api/items", {
+    method: "POST",
     body: mutationBody(item, image, remoteImageUrl),
   });
   return response.item;
@@ -69,33 +76,56 @@ export async function createItem(
 
 export async function deleteItem(itemId: string): Promise<void> {
   await apiRequest<{ deleted: true }>(`/api/items/${itemId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
-export async function importTcgplayerProduct(url: string): Promise<TcgplayerImportResult> {
-  return apiRequest<TcgplayerImportResult>('/api/import/tcgplayer', {
-    method: 'POST',
+export async function importTcgplayerProduct(
+  url: string,
+): Promise<TcgplayerImportResult> {
+  return apiRequest<TcgplayerImportResult>("/api/import/tcgplayer", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ url }),
   });
 }
 
+export async function searchTcgplayerCards(
+  code: string,
+): Promise<TcgplayerCardSearchResponse> {
+  return apiRequest<TcgplayerCardSearchResponse>(
+    "/api/import/tcgplayer/card-search",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ code }),
+    },
+  );
+}
+
 export async function getCollections(): Promise<CardCollection[]> {
-  const response = await apiRequest<{ collections: CardCollection[] }>('/api/collections');
+  const response = await apiRequest<{ collections: CardCollection[] }>(
+    "/api/collections",
+  );
   return response.collections;
 }
 
-export async function getCollection(collectionId: string): Promise<CardCollection> {
+export async function getCollection(
+  collectionId: string,
+): Promise<CardCollection> {
   const response = await apiRequest<{ collection: CardCollection }>(
     `/api/collections/${collectionId}`,
   );
   return response.collection;
 }
 
-export async function getCollectionCards(collectionId: string): Promise<InventoryItem[]> {
+export async function getCollectionCards(
+  collectionId: string,
+): Promise<InventoryItem[]> {
   const response = await apiRequest<{ items: InventoryItem[] }>(
     `/api/collections/${collectionId}/cards`,
   );
@@ -103,11 +133,14 @@ export async function getCollectionCards(collectionId: string): Promise<Inventor
 }
 
 export async function createCollection(name: string): Promise<CardCollection> {
-  const response = await apiRequest<{ collection: CardCollection }>('/api/collections', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
+  const response = await apiRequest<{ collection: CardCollection }>(
+    "/api/collections",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    },
+  );
   return response.collection;
 }
 
@@ -118,8 +151,8 @@ export async function renameCollection(
   const response = await apiRequest<{ collection: CardCollection }>(
     `/api/collections/${collectionId}`,
     {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     },
   );
@@ -128,16 +161,22 @@ export async function renameCollection(
 
 export async function deleteCollection(collectionId: string): Promise<void> {
   await apiRequest<{ deleted: true }>(`/api/collections/${collectionId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
-export async function moveCard(itemId: string, collectionId: string): Promise<InventoryItem> {
-  const response = await apiRequest<{ item: InventoryItem }>(`/api/items/${itemId}/collection`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ collectionId }),
-  });
+export async function moveCard(
+  itemId: string,
+  collectionId: string,
+): Promise<InventoryItem> {
+  const response = await apiRequest<{ item: InventoryItem }>(
+    `/api/items/${itemId}/collection`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collectionId }),
+    },
+  );
   return response.item;
 }
 
@@ -145,14 +184,58 @@ export async function updateCardGrading(
   itemId: string,
   grading: CardGrading,
 ): Promise<InventoryItem> {
-  const response = await apiRequest<{ item: InventoryItem }>(`/api/items/${itemId}/grading`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(grading),
-  });
+  const response = await apiRequest<{ item: InventoryItem }>(
+    `/api/items/${itemId}/grading`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(grading),
+    },
+  );
+  return response.item;
+}
+
+export async function updateCardJapaneseStatus(
+  itemId: string,
+  status: CardJapaneseStatus,
+): Promise<InventoryItem> {
+  const response = await apiRequest<{ item: InventoryItem }>(
+    `/api/items/${itemId}/japanese`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(status),
+    },
+  );
+  return response.item;
+}
+
+export async function updateItemOwnership(
+  itemId: string,
+  status: ItemOwnershipStatus,
+): Promise<InventoryItem> {
+  const response = await apiRequest<{ item: InventoryItem }>(
+    `/api/items/${itemId}/ownership`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(status),
+    },
+  );
   return response.item;
 }
 
 export async function getSealedSets(): Promise<SealedSetsResponse> {
-  return apiRequest<SealedSetsResponse>('/api/sealed-sets');
+  return apiRequest<SealedSetsResponse>("/api/sealed-sets");
+}
+
+export async function trackMissingSealedSet(
+  setName: string,
+  setCode: string,
+): Promise<void> {
+  await apiRequest("/api/sealed-sets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setName, setCode }),
+  });
 }

@@ -1,5 +1,5 @@
-import DeleteIcon from '@mui/icons-material/Delete';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import DeleteIcon from "@mui/icons-material/Delete";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {
   Alert,
   Box,
@@ -22,29 +22,201 @@ import {
   Switch,
   TextField,
   Typography,
-} from '@mui/material';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { bgsGrades, gradingCompanies, psaGrades, type CardGrading } from '@one-piece-tcg/shared';
-import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+} from "@mui/material";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  bgsGrades,
+  gradingCompanies,
+  psaGrades,
+  type CardGrading,
+} from "@one-piece-tcg/shared";
+import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { ApiClientError } from '../api/client';
-import { deleteItem, moveCard, updateCardGrading } from '../api/collection';
-import { ErrorState } from '../components/ErrorState';
-import { GradingBadge } from '../components/GradingBadge';
-import { ItemImage } from '../components/ItemImage';
-import { LoadingState } from '../components/LoadingState';
-import { collectionQueryKeys, useCollections, useItem } from '../features/inventory/queries';
-import { formatDate, titleCase } from '../utils/format';
+import { ApiClientError } from "../api/client";
+import {
+  deleteItem,
+  moveCard,
+  updateCardGrading,
+  updateCardJapaneseStatus,
+  updateItemOwnership,
+} from "../api/collection";
+import { ErrorState } from "../components/ErrorState";
+import { GradingBadge } from "../components/GradingBadge";
+import { ItemImage } from "../components/ItemImage";
+import { LoadingState } from "../components/LoadingState";
+import {
+  collectionQueryKeys,
+  useCollections,
+  useItem,
+} from "../features/inventory/queries";
+import { formatDate, titleCase } from "../utils/format";
 
 function Detail({ label, value }: { label: string; value: ReactNode }) {
-  if (value === undefined || value === null || value === '') return null;
+  if (value === undefined || value === null || value === "") return null;
   return (
     <Box>
-      <Typography variant="caption" color="text.secondary" textTransform="uppercase">
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        textTransform="uppercase"
+      >
         {label}
       </Typography>
       <Typography sx={{ mt: 0.25 }}>{value}</Typography>
+    </Box>
+  );
+}
+
+function ItemOwnershipEditor({
+  itemId,
+  initialValue,
+}: {
+  itemId: string;
+  initialValue: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [isOwned, setIsOwned] = useState(initialValue);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    setIsOwned(initialValue);
+  }, [initialValue]);
+
+  const mutation = useMutation({
+    mutationFn: (nextValue: boolean) =>
+      updateItemOwnership(itemId, { isOwned: nextValue }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: collectionQueryKeys.all,
+      });
+      setError(undefined);
+    },
+    onError: (mutationError, nextValue) => {
+      setIsOwned(!nextValue);
+      setError(
+        mutationError instanceof ApiClientError
+          ? mutationError.message
+          : "Ownership status could not be saved.",
+      );
+    },
+  });
+
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        p: 2.5,
+        border: 1,
+        borderColor: isOwned ? "success.main" : "error.main",
+        borderRadius: 2,
+        bgcolor: isOwned
+          ? "rgba(34, 197, 94, 0.05)"
+          : "rgba(239, 68, 68, 0.08)",
+      }}
+    >
+      <Typography variant="h6">Ownership</Typography>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={isOwned}
+            color={isOwned ? "success" : "error"}
+            disabled={mutation.isPending}
+            onChange={(_event, checked) => {
+              setIsOwned(checked);
+              setError(undefined);
+              mutation.mutate(checked);
+            }}
+          />
+        }
+        label={isOwned ? "Owned" : "Missing / not owned"}
+        sx={{ mt: 0.5 }}
+      />
+      {!isOwned ? (
+        <Typography variant="body2" color="error.light">
+          This item stays visible but is marked Missing.
+        </Typography>
+      ) : null}
+      {error ? (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      ) : null}
+    </Box>
+  );
+}
+
+function CardJapaneseEditor({
+  itemId,
+  initialValue,
+}: {
+  itemId: string;
+  initialValue: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [isJapanese, setIsJapanese] = useState(initialValue);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    setIsJapanese(initialValue);
+  }, [initialValue]);
+
+  const mutation = useMutation({
+    mutationFn: (nextValue: boolean) =>
+      updateCardJapaneseStatus(itemId, { isJapanese: nextValue }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: collectionQueryKeys.all,
+      });
+      setError(undefined);
+    },
+    onError: (mutationError, nextValue) => {
+      setIsJapanese(!nextValue);
+      setError(
+        mutationError instanceof ApiClientError
+          ? mutationError.message
+          : "Japanese status could not be saved.",
+      );
+    },
+  });
+
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        p: 2.5,
+        border: 1,
+        borderColor: isJapanese ? "secondary.main" : "divider",
+        borderRadius: 2,
+        bgcolor: isJapanese ? "rgba(239, 68, 68, 0.06)" : "transparent",
+      }}
+    >
+      <Typography variant="h6">Card language</Typography>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={isJapanese}
+            disabled={mutation.isPending}
+            onChange={(_event, checked) => {
+              setIsJapanese(checked);
+              setError(undefined);
+              mutation.mutate(checked);
+            }}
+          />
+        }
+        label={
+          isJapanese ? "Japanese card (JP)" : "English / non-Japanese card"
+        }
+        sx={{ mt: 0.5 }}
+      />
+      <Typography variant="body2" color="text.secondary">
+        Turning this on marks the card as Japanese and displays the JP badge.
+      </Typography>
+      {error ? (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      ) : null}
     </Box>
   );
 }
@@ -58,17 +230,17 @@ function CardGradingEditor({
 }) {
   const queryClient = useQueryClient();
   const [isGraded, setIsGraded] = useState(initialGrading.isGraded);
-  const [grader, setGrader] = useState<NonNullable<CardGrading['grader']>>(
-    initialGrading.grader ?? 'PSA',
+  const [grader, setGrader] = useState<NonNullable<CardGrading["grader"]>>(
+    initialGrading.grader ?? "PSA",
   );
-  const [grade, setGrade] = useState(initialGrading.grade ?? '');
+  const [grade, setGrade] = useState(initialGrading.grade ?? "");
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     setIsGraded(initialGrading.isGraded);
-    setGrader(initialGrading.grader ?? 'PSA');
-    setGrade(initialGrading.grade ?? '');
+    setGrader(initialGrading.grader ?? "PSA");
+    setGrade(initialGrading.grade ?? "");
   }, [initialGrading.grade, initialGrading.grader, initialGrading.isGraded]);
 
   const mutation = useMutation({
@@ -79,8 +251,12 @@ function CardGradingEditor({
         grade: isGraded ? grade : undefined,
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: collectionQueryKeys.all });
-      setMessage(isGraded ? 'Grading details saved.' : 'Card marked as ungraded.');
+      await queryClient.invalidateQueries({
+        queryKey: collectionQueryKeys.all,
+      });
+      setMessage(
+        isGraded ? "Grading details saved." : "Card marked as ungraded.",
+      );
       setError(undefined);
     },
     onError: (mutationError) => {
@@ -88,11 +264,11 @@ function CardGradingEditor({
       setError(
         mutationError instanceof ApiClientError
           ? mutationError.message
-          : 'Grading details could not be saved.',
+          : "Grading details could not be saved.",
       );
     },
   });
-  const gradeOptions = grader === 'PSA' ? psaGrades : bgsGrades;
+  const gradeOptions = grader === "PSA" ? psaGrades : bgsGrades;
 
   return (
     <Box
@@ -100,9 +276,9 @@ function CardGradingEditor({
         mt: 3,
         p: 2.5,
         border: 1,
-        borderColor: isGraded ? 'success.main' : 'divider',
+        borderColor: isGraded ? "success.main" : "divider",
         borderRadius: 2,
-        bgcolor: isGraded ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
+        bgcolor: isGraded ? "rgba(34, 197, 94, 0.05)" : "transparent",
       }}
     >
       <Typography variant="h6">Grading</Typography>
@@ -117,13 +293,13 @@ function CardGradingEditor({
             }}
           />
         }
-        label={isGraded ? 'This card is graded' : 'This card is not graded'}
+        label={isGraded ? "This card is graded" : "This card is not graded"}
         sx={{ mt: 0.5 }}
       />
 
       {isGraded ? (
         <Stack gap={2} sx={{ mt: 2 }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
+          <Stack direction={{ xs: "column", sm: "row" }} gap={2}>
             <FormControl fullWidth>
               <InputLabel>Grading company</InputLabel>
               <Select
@@ -131,9 +307,11 @@ function CardGradingEditor({
                 value={grader}
                 onChange={(event) => {
                   const company =
-                    gradingCompanies.find((option) => option === event.target.value) ?? 'Other';
+                    gradingCompanies.find(
+                      (option) => option === event.target.value,
+                    ) ?? "Other";
                   setGrader(company);
-                  setGrade('');
+                  setGrade("");
                 }}
               >
                 {gradingCompanies.map((company) => (
@@ -144,7 +322,7 @@ function CardGradingEditor({
               </Select>
             </FormControl>
 
-            {grader === 'Other' ? (
+            {grader === "Other" ? (
               <TextField
                 fullWidth
                 label="Grade"
@@ -189,7 +367,7 @@ function CardGradingEditor({
         onClick={() => mutation.mutate()}
         sx={{ mt: 2 }}
       >
-        {mutation.isPending ? 'Saving...' : 'Save grading'}
+        {mutation.isPending ? "Saving..." : "Save grading"}
       </Button>
     </Box>
   );
@@ -205,37 +383,47 @@ export function ItemDetailPage() {
   const [error, setError] = useState<string>();
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteItem(itemId ?? ''),
+    mutationFn: () => deleteItem(itemId ?? ""),
     onSuccess: async () => {
       const item = itemQuery.data;
-      await queryClient.invalidateQueries({ queryKey: collectionQueryKeys.all });
-      navigate(item?.kind === 'card' ? `/collections/${item.collectionId}` : '/sealed', {
-        state: { notification: 'Item deleted.' },
+      await queryClient.invalidateQueries({
+        queryKey: collectionQueryKeys.all,
       });
+      navigate(
+        item?.kind === "card" ? `/collections/${item.collectionId}` : "/sealed",
+        {
+          state: { notification: "Item deleted." },
+        },
+      );
     },
     onError: (mutationError) => {
       setError(
         mutationError instanceof ApiClientError
           ? mutationError.message
-          : 'The item could not be deleted.',
+          : "The item could not be deleted.",
       );
       setConfirmDelete(false);
     },
   });
 
   const moveMutation = useMutation({
-    mutationFn: (collectionId: string) => moveCard(itemId ?? '', collectionId),
+    mutationFn: (collectionId: string) => moveCard(itemId ?? "", collectionId),
     onSuccess: async (updatedItem) => {
-      await queryClient.invalidateQueries({ queryKey: collectionQueryKeys.all });
-      navigate(`/collections/${updatedItem.kind === 'card' ? updatedItem.collectionId : ''}`, {
-        state: { notification: `${updatedItem.name} was moved.` },
+      await queryClient.invalidateQueries({
+        queryKey: collectionQueryKeys.all,
       });
+      navigate(
+        `/collections/${updatedItem.kind === "card" ? updatedItem.collectionId : ""}`,
+        {
+          state: { notification: `${updatedItem.name} was moved.` },
+        },
+      );
     },
     onError: (mutationError) => {
       setError(
         mutationError instanceof ApiClientError
           ? mutationError.message
-          : 'The card could not be moved.',
+          : "The card could not be moved.",
       );
     },
   });
@@ -252,19 +440,29 @@ export function ItemDetailPage() {
       {error ? <Alert severity="error">{error}</Alert> : null}
 
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems={{ sm: 'center' }}
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ sm: "center" }}
         justifyContent="space-between"
         gap={2}
       >
         <Box>
-          <Chip label={titleCase(item.kind)} color="primary" variant="outlined" />
+          <Stack direction="row" gap={1} flexWrap="wrap">
+            <Chip
+              label={titleCase(item.kind)}
+              color="primary"
+              variant="outlined"
+            />
+            {!item.isOwned ? <Chip label="Missing" color="error" /> : null}
+            {item.kind === "card" && item.isJapanese ? (
+              <Chip label="Japanese" color="secondary" variant="outlined" />
+            ) : null}
+          </Stack>
           <Typography variant="h3" sx={{ mt: 1 }}>
             {item.name}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
             {item.setName}
-            {item.setCode ? ` · ${item.setCode}` : ''}
+            {item.setCode ? ` · ${item.setCode}` : ""}
           </Typography>
         </Box>
         <Button
@@ -279,8 +477,12 @@ export function ItemDetailPage() {
 
       <Grid2 container spacing={3}>
         <Grid2 size={{ xs: 12, md: 5, lg: 4 }}>
-          <Card sx={{ overflow: 'hidden' }}>
-            <ItemImage src={item.image?.url} alt={item.name} height={{ xs: 380, md: 520 }} />
+          <Card sx={{ overflow: "hidden" }}>
+            <ItemImage
+              src={item.image?.url}
+              alt={item.name}
+              height={{ xs: 380, md: 520 }}
+            />
           </Card>
         </Grid2>
         <Grid2 size={{ xs: 12, md: 7, lg: 8 }}>
@@ -292,7 +494,7 @@ export function ItemDetailPage() {
                   <Detail label="Language" value={item.language} />
                 </Grid2>
 
-                {item.kind === 'card' ? (
+                {item.kind === "card" ? (
                   <>
                     <Grid2 size={{ xs: 6, sm: 4 }}>
                       <Detail label="Card number" value={item.cardNumber} />
@@ -304,7 +506,7 @@ export function ItemDetailPage() {
                       <Detail label="Card type" value={item.cardType} />
                     </Grid2>
                     <Grid2 size={{ xs: 6, sm: 4 }}>
-                      <Detail label="Colors" value={item.colors.join(', ')} />
+                      <Detail label="Colors" value={item.colors.join(", ")} />
                     </Grid2>
                     <Grid2 size={{ xs: 6, sm: 4 }}>
                       <Detail label="Condition" value={item.condition} />
@@ -318,8 +520,12 @@ export function ItemDetailPage() {
                         <Select
                           label="Card collection"
                           value={item.collectionId}
-                          disabled={collectionsQuery.isLoading || moveMutation.isPending}
-                          onChange={(event) => moveMutation.mutate(event.target.value)}
+                          disabled={
+                            collectionsQuery.isLoading || moveMutation.isPending
+                          }
+                          onChange={(event) =>
+                            moveMutation.mutate(event.target.value)
+                          }
                         >
                           {(collectionsQuery.data ?? []).map((collection) => (
                             <MenuItem key={collection.id} value={collection.id}>
@@ -328,6 +534,12 @@ export function ItemDetailPage() {
                           ))}
                         </Select>
                       </FormControl>
+                    </Grid2>
+                    <Grid2 size={{ xs: 12 }}>
+                      <CardJapaneseEditor
+                        itemId={item.id}
+                        initialValue={item.isJapanese}
+                      />
                     </Grid2>
                     <Grid2 size={{ xs: 12 }}>
                       <CardGradingEditor
@@ -346,9 +558,12 @@ export function ItemDetailPage() {
                       <Detail label="Product code" value={item.productCode} />
                     </Grid2>
                     <Grid2 size={{ xs: 6, sm: 4 }}>
-                      <Detail label="Status" value={item.isSealed ? 'Sealed' : 'Opened'} />
+                      <Detail
+                        label="Status"
+                        value={item.isSealed ? "Sealed" : "Opened"}
+                      />
                     </Grid2>
-                    {item.kind === 'pack' ? (
+                    {item.kind === "pack" ? (
                       <Grid2 size={{ xs: 12, sm: 4 }}>
                         <Detail label="Pack variant" value={item.packVariant} />
                       </Grid2>
@@ -358,7 +573,10 @@ export function ItemDetailPage() {
                           <Detail label="Box type" value={item.boxType} />
                         </Grid2>
                         <Grid2 size={{ xs: 6, sm: 4 }}>
-                          <Detail label="Packs per box" value={item.packsPerBox} />
+                          <Detail
+                            label="Packs per box"
+                            value={item.packsPerBox}
+                          />
                         </Grid2>
                       </>
                     )}
@@ -366,10 +584,17 @@ export function ItemDetailPage() {
                 )}
 
                 <Grid2 size={{ xs: 12 }}>
+                  <ItemOwnershipEditor
+                    itemId={item.id}
+                    initialValue={item.isOwned}
+                  />
+                </Grid2>
+
+                <Grid2 size={{ xs: 12 }}>
                   <Detail label="Description" value={item.notes} />
                 </Grid2>
 
-                {item.source?.provider === 'tcgplayer' ? (
+                {item.source?.provider === "tcgplayer" ? (
                   <Grid2 size={{ xs: 12 }}>
                     <Button
                       component="a"
@@ -397,7 +622,8 @@ export function ItemDetailPage() {
         <DialogTitle>Delete {item.name}?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This removes the item and its GridFS image from MongoDB. This cannot be undone.
+            This removes the item and its GridFS image from MongoDB. This cannot
+            be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -408,7 +634,7 @@ export function ItemDetailPage() {
             disabled={deleteMutation.isPending}
             onClick={() => deleteMutation.mutate()}
           >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>

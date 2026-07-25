@@ -6,12 +6,13 @@ import {
   languages,
   tcgplayerImportedItemSchema,
   type TcgplayerImportedItem,
+  type TcgplayerCardSearchResponse,
   type TcgplayerImportResult,
-} from '@one-piece-tcg/shared';
-import { z } from 'zod';
+} from "@one-piece-tcg/shared";
+import { z } from "zod";
 
-import { AppError } from '../errors/app-error.js';
-import type { ImageUpload } from '../middleware/upload.js';
+import { AppError } from "../errors/app-error.js";
+import type { ImageUpload } from "../middleware/upload.js";
 
 const tcgplayerProductSchema = z
   .object({
@@ -34,64 +35,134 @@ const tcgplayerProductSchema = z
 
 type TcgplayerProduct = z.infer<typeof tcgplayerProductSchema>;
 
+const catalogSetSchema = z.object({
+  categoryId: z.number(),
+  name: z.string(),
+  abbreviation: z.string(),
+});
+
+const catalogResponseSchema = z.object({
+  results: z.array(catalogSetSchema),
+});
+
+const searchProductSchema = z
+  .object({
+    productId: z.number().int().positive(),
+    productLineName: z.string().optional(),
+    setName: z.string().optional(),
+    customAttributes: z.record(z.unknown()).default({}),
+    formattedAttributes: z.record(z.unknown()).default({}),
+  })
+  .passthrough();
+
+const searchResponseSchema = z.object({
+  results: z
+    .array(
+      z.object({
+        totalResults: z.number().nonnegative().default(0),
+        results: z.array(searchProductSchema).default([]),
+      }),
+    )
+    .default([]),
+});
+
 interface ParsedTcgplayerUrl {
   productId: number;
   canonicalUrl: string;
   language: (typeof languages)[number];
 }
 
-const supportedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const supportedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-function attributeText(attributes: Record<string, unknown>, key: string): string | undefined {
+export function normalizeCardCode(input: string): string {
+  const normalized = input
+    .trim()
+    .toUpperCase()
+    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/\s+/g, "");
+  if (!/^[A-Z]{1,5}\d{0,3}-\d{3}$/.test(normalized)) {
+    throw new AppError(
+      400,
+      "invalid_card_code",
+      "Enter a card code such as OP12-091 or ST13-011",
+    );
+  }
+  return normalized;
+}
+
+function normalizedSetCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function isRelatedSet(abbreviation: string, familyCode: string): boolean {
+  const normalized = normalizedSetCode(abbreviation);
+  if (normalized === familyCode) return true;
+  const suffix = normalized.slice(familyCode.length);
+  return (
+    normalized.startsWith(familyCode) && ["PRE", "RE", "ANN"].includes(suffix)
+  );
+}
+
+function attributeText(
+  attributes: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = attributes[key];
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === "string" && value.trim()) {
     return value.trim();
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return String(value);
   }
   return undefined;
 }
 
-function attributeList(attributes: Record<string, unknown>, key: string): string[] {
+function attributeList(
+  attributes: Record<string, unknown>,
+  key: string,
+): string[] {
   const value = attributes[key];
   if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === 'string');
+    return value.filter((entry): entry is string => typeof entry === "string");
   }
-  return typeof value === 'string' ? [value] : [];
+  return typeof value === "string" ? [value] : [];
 }
 
 function decodeHtmlText(value: string): string {
   const entities: Record<string, string> = {
-    '&amp;': '&',
-    '&apos;': "'",
-    '&#39;': "'",
-    '&quot;': '"',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&nbsp;': ' ',
+    "&amp;": "&",
+    "&apos;": "'",
+    "&#39;": "'",
+    "&quot;": '"',
+    "&lt;": "<",
+    "&gt;": ">",
+    "&nbsp;": " ",
   };
 
   return value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&(amp|apos|#39|quot|lt|gt|nbsp);/g, (entity) => entities[entity] ?? entity)
-    .replace(/\r/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(
+      /&(amp|apos|#39|quot|lt|gt|nbsp);/g,
+      (entity) => entities[entity] ?? entity,
+    )
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, 2_000);
 }
 
 function inferLanguage(url: URL): (typeof languages)[number] {
-  const requestedLanguage = url.searchParams.get('Language');
-  if (!requestedLanguage || requestedLanguage.toLowerCase() === 'all') {
-    return 'English';
+  const requestedLanguage = url.searchParams.get("Language");
+  if (!requestedLanguage || requestedLanguage.toLowerCase() === "all") {
+    return "English";
   }
 
   return (
-    languages.find((language) => language.toLowerCase() === requestedLanguage.toLowerCase()) ??
-    'Other'
+    languages.find(
+      (language) => language.toLowerCase() === requestedLanguage.toLowerCase(),
+    ) ?? "Other"
   );
 }
 
@@ -100,79 +171,106 @@ export function parseTcgplayerProductUrl(input: string): ParsedTcgplayerUrl {
   try {
     url = new URL(input);
   } catch {
-    throw new AppError(400, 'invalid_tcgplayer_url', 'Enter a valid TCGplayer product URL');
+    throw new AppError(
+      400,
+      "invalid_tcgplayer_url",
+      "Enter a valid TCGplayer product URL",
+    );
   }
 
   const hostname = url.hostname.toLowerCase();
   if (
-    url.protocol !== 'https:' ||
-    (hostname !== 'tcgplayer.com' && hostname !== 'www.tcgplayer.com') ||
+    url.protocol !== "https:" ||
+    (hostname !== "tcgplayer.com" && hostname !== "www.tcgplayer.com") ||
     url.port ||
     url.username ||
     url.password
   ) {
     throw new AppError(
       400,
-      'invalid_tcgplayer_url',
-      'Only HTTPS product links from www.tcgplayer.com are supported',
+      "invalid_tcgplayer_url",
+      "Only HTTPS product links from www.tcgplayer.com are supported",
     );
   }
 
   const match = url.pathname.match(/^\/product\/(\d+)(?:\/[^/]+)?\/?$/i);
   if (!match?.[1]) {
-    throw new AppError(400, 'invalid_tcgplayer_url', 'The link must be a TCGplayer product page');
+    throw new AppError(
+      400,
+      "invalid_tcgplayer_url",
+      "The link must be a TCGplayer product page",
+    );
   }
 
   const productId = Number(match[1]);
   if (!Number.isSafeInteger(productId) || productId <= 0) {
-    throw new AppError(400, 'invalid_tcgplayer_url', 'The TCGplayer product ID is invalid');
+    throw new AppError(
+      400,
+      "invalid_tcgplayer_url",
+      "The TCGplayer product ID is invalid",
+    );
   }
 
   return {
     productId,
-    canonicalUrl: `https://www.tcgplayer.com${url.pathname.replace(/\/$/, '')}`,
+    canonicalUrl: `https://www.tcgplayer.com${url.pathname.replace(/\/$/, "")}`,
     language: inferLanguage(url),
   };
 }
 
-function inferCardFinish(product: TcgplayerProduct): (typeof cardFinishes)[number] {
-  const label = `${product.productName} ${product.productUrlName ?? ''}`.toLowerCase();
-  if (label.includes('manga')) return 'Manga';
-  if (label.includes('alternate art') || label.includes('alt art') || /\bsp\b/.test(label)) {
-    return 'Alternate Art';
+function inferCardFinish(
+  product: TcgplayerProduct,
+): (typeof cardFinishes)[number] {
+  const label =
+    `${product.productName} ${product.productUrlName ?? ""}`.toLowerCase();
+  if (label.includes("manga")) return "Manga";
+  if (
+    label.includes("alternate art") ||
+    label.includes("alt art") ||
+    /\bsp\b/.test(label)
+  ) {
+    return "Alternate Art";
   }
-  if (label.includes('parallel')) return 'Parallel';
-  if (label.includes('promo')) return 'Promo';
-  if (product.foilOnly) return 'Foil';
-  return 'Regular';
+  if (label.includes("parallel")) return "Parallel";
+  if (label.includes("promo")) return "Promo";
+  if (product.foilOnly) return "Foil";
+  return "Regular";
 }
 
 function inferCardType(product: TcgplayerProduct): (typeof cardTypes)[number] {
-  const rawType = attributeList(product.customAttributes, 'cardType')[0];
-  if (!rawType) return 'Other';
-  if (rawType.toLowerCase().startsWith('don')) return 'Don';
+  const rawType = attributeList(product.customAttributes, "cardType")[0];
+  if (!rawType) return "Other";
+  if (rawType.toLowerCase().startsWith("don")) return "Don";
 
-  return cardTypes.find((cardType) => cardType.toLowerCase() === rawType.toLowerCase()) ?? 'Other';
+  return (
+    cardTypes.find(
+      (cardType) => cardType.toLowerCase() === rawType.toLowerCase(),
+    ) ?? "Other"
+  );
 }
 
-function inferCardColors(product: TcgplayerProduct): (typeof cardColors)[number][] {
-  const colors = attributeList(product.customAttributes, 'color')
+function inferCardColors(
+  product: TcgplayerProduct,
+): (typeof cardColors)[number][] {
+  const colors = attributeList(product.customAttributes, "color")
     .map((rawColor) =>
-      cardColors.find((cardColor) => cardColor.toLowerCase() === rawColor.toLowerCase()),
+      cardColors.find(
+        (cardColor) => cardColor.toLowerCase() === rawColor.toLowerCase(),
+      ),
     )
     .filter((color): color is (typeof cardColors)[number] => Boolean(color));
 
-  return colors.length > 0 ? colors : ['Other'];
+  return colors.length > 0 ? colors : ["Other"];
 }
 
 function inferBoxType(productName: string): (typeof boxTypes)[number] {
   const name = productName.toLowerCase();
-  if (name.includes('booster box')) return 'Booster Box';
-  if (name.includes('display')) return 'Display';
-  if (name.includes('starter deck')) return 'Starter Deck';
-  if (name.includes('gift collection')) return 'Gift Collection';
-  if (name.includes('case')) return 'Case';
-  return 'Other';
+  if (name.includes("booster box")) return "Booster Box";
+  if (name.includes("display")) return "Display";
+  if (name.includes("starter deck")) return "Starter Deck";
+  if (name.includes("gift collection")) return "Gift Collection";
+  if (name.includes("case")) return "Case";
+  return "Other";
 }
 
 function inferPacksPerBox(description: string | undefined): number | undefined {
@@ -183,7 +281,9 @@ function inferPacksPerBox(description: string | undefined): number | undefined {
 
 function isPackProduct(productName: string): boolean {
   const name = productName.toLowerCase();
-  return /\bbooster pack\b/.test(name) && !/\bbox\b|\bdisplay\b|\bcase\b/.test(name);
+  return (
+    /\bbooster pack\b/.test(name) && !/\bbox\b|\bdisplay\b|\bcase\b/.test(name)
+  );
 }
 
 export function mapTcgplayerProductDetails(
@@ -194,28 +294,36 @@ export function mapTcgplayerProductDetails(
   const product = tcgplayerProductSchema.parse(rawProduct);
 
   if (product.productId !== parsedUrl.productId) {
-    throw new AppError(502, 'tcgplayer_product_mismatch', 'TCGplayer returned a different product');
+    throw new AppError(
+      502,
+      "tcgplayer_product_mismatch",
+      "TCGplayer returned a different product",
+    );
   }
-  if (product.productLineName.toLowerCase() !== 'one piece card game') {
+  if (product.productLineName.toLowerCase() !== "one piece card game") {
     throw new AppError(
       400,
-      'unsupported_product_line',
-      'Only One Piece Card Game TCGplayer products are supported',
+      "unsupported_product_line",
+      "Only One Piece Card Game TCGplayer products are supported",
     );
   }
 
-  const descriptionValue = attributeText(product.customAttributes, 'description');
+  const descriptionValue = attributeText(
+    product.customAttributes,
+    "description",
+  );
   const notes = descriptionValue ? decodeHtmlText(descriptionValue) : undefined;
   const common = {
     name: product.productName,
     setName: product.setName,
     setCode: product.setCode ?? undefined,
+    isOwned: true,
     quantity: 1,
     language: parsedUrl.language,
-    tags: ['tcgplayer'],
+    tags: ["tcgplayer"],
     notes,
     source: {
-      provider: 'tcgplayer' as const,
+      provider: "tcgplayer" as const,
       productId: product.productId,
       url: parsedUrl.canonicalUrl,
       importedAt: new Date().toISOString(),
@@ -224,48 +332,53 @@ export function mapTcgplayerProductDetails(
   let item: TcgplayerImportedItem;
   const warnings: string[] = [];
 
-  if (product.productTypeName.toLowerCase() === 'cards') {
+  if (product.productTypeName.toLowerCase() === "cards") {
     const cardNumber =
-      attributeText(product.customAttributes, 'number') ??
-      attributeText(product.formattedAttributes, 'Number');
+      attributeText(product.customAttributes, "number") ??
+      attributeText(product.formattedAttributes, "Number");
     if (!cardNumber) {
       throw new AppError(
         422,
-        'tcgplayer_card_number_missing',
-        'TCGplayer did not provide a card number for this product',
+        "tcgplayer_card_number_missing",
+        "TCGplayer did not provide a card number for this product",
       );
     }
 
     item = tcgplayerImportedItemSchema.parse({
       ...common,
-      kind: 'card',
+      kind: "card",
+      isJapanese: parsedUrl.language === "Japanese",
       cardNumber,
       rarity:
-        attributeText(product.customAttributes, 'rarityDbName') ?? product.rarityName ?? 'Unknown',
+        attributeText(product.customAttributes, "rarityDbName") ??
+        product.rarityName ??
+        "Unknown",
       colors: inferCardColors(product),
       cardType: inferCardType(product),
-      condition: 'Near Mint',
+      condition: "Near Mint",
       finish: inferCardFinish(product),
       isGraded: false,
     });
-  } else if (product.productTypeName.toLowerCase() === 'sealed products') {
+  } else if (product.productTypeName.toLowerCase() === "sealed products") {
     const packProduct = isPackProduct(product.productName);
     if (packProduct) {
       item = tcgplayerImportedItemSchema.parse({
         ...common,
-        kind: 'pack',
+        kind: "pack",
         productCode: product.setCode ?? undefined,
         isSealed: true,
         packVariant: product.productName,
       });
     } else {
       const boxType = inferBoxType(product.productName);
-      if (boxType === 'Other') {
-        warnings.push('The sealed product type was set to Other; review it before saving.');
+      if (boxType === "Other") {
+        warnings.push(
+          "The sealed product type was set to Other; review it before saving.",
+        );
       }
       item = tcgplayerImportedItemSchema.parse({
         ...common,
-        kind: 'box',
+        kind: "box",
         productCode: product.setCode ?? undefined,
         boxType,
         isSealed: true,
@@ -275,13 +388,13 @@ export function mapTcgplayerProductDetails(
   } else {
     throw new AppError(
       422,
-      'unsupported_tcgplayer_product',
+      "unsupported_tcgplayer_product",
       `TCGplayer product type "${product.productTypeName}" is not supported`,
     );
   }
 
   if (product.marketPrice === null || product.marketPrice === undefined) {
-    warnings.push('TCGplayer did not provide a current market price.');
+    warnings.push("TCGplayer did not provide a current market price.");
   }
 
   return {
@@ -308,23 +421,29 @@ export class TcgplayerClient {
     try {
       response = await this.fetchImplementation(endpoint, {
         headers: {
-          Accept: 'application/json',
-          'User-Agent': 'GrandLineVault/0.1 local collection importer',
+          Accept: "application/json",
+          "User-Agent": "GrandLineVault/0.1 local collection importer",
         },
-        redirect: 'error',
+        redirect: "error",
         signal: AbortSignal.timeout(10_000),
       });
     } catch (error) {
-      console.error('TCGplayer product request failed', error);
-      throw new AppError(502, 'tcgplayer_unavailable', 'TCGplayer could not be reached');
+      console.error("TCGplayer product request failed", error);
+      throw new AppError(
+        502,
+        "tcgplayer_unavailable",
+        "TCGplayer could not be reached",
+      );
     }
 
     if (!response.ok) {
       throw new AppError(
         response.status === 404 ? 404 : 502,
-        response.status === 404 ? 'tcgplayer_product_not_found' : 'tcgplayer_request_failed',
         response.status === 404
-          ? 'TCGplayer product not found'
+          ? "tcgplayer_product_not_found"
+          : "tcgplayer_request_failed",
+        response.status === 404
+          ? "TCGplayer product not found"
           : `TCGplayer returned status ${response.status}`,
       );
     }
@@ -333,23 +452,131 @@ export class TcgplayerClient {
       return mapTcgplayerProductDetails(await response.json(), sourceUrl);
     } catch (error) {
       if (error instanceof AppError) throw error;
-      console.error('TCGplayer returned invalid product data', error);
+      console.error("TCGplayer returned invalid product data", error);
       throw new AppError(
         502,
-        'tcgplayer_invalid_response',
-        'TCGplayer returned product data in an unsupported format',
+        "tcgplayer_invalid_response",
+        "TCGplayer returned product data in an unsupported format",
       );
     }
   }
 
-  async downloadImage(imageUrl: string, expectedProductId: number): Promise<ImageUpload> {
+  async searchCardsByCode(input: string): Promise<TcgplayerCardSearchResponse> {
+    const code = normalizeCardCode(input);
+    const familyCode = code.slice(0, code.lastIndexOf("-"));
+    const catalog = await this.fetchJson(
+      "https://mpapi.tcgplayer.com/v2/Catalog/SetNames?categoryId=68&limit=500&active=true",
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "GrandLineVault/0.1 card code search",
+        },
+      },
+      "TCGplayer card catalog could not be reached",
+    );
+    const sets = catalogResponseSchema
+      .parse(catalog)
+      .results.filter(
+        (set) =>
+          set.categoryId === 68 && isRelatedSet(set.abbreviation, familyCode),
+      );
+
+    if (sets.length === 0) {
+      return { code, results: [], warnings: [] };
+    }
+
+    const productIds = new Set<number>();
+    for (const set of sets) {
+      let offset = 0;
+      let totalResults = 1;
+
+      while (offset < totalResults && offset < 500) {
+        const payload = await this.fetchJson(
+          "https://mp-search-api.tcgplayer.com/v1/search/request?isList=true",
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              "User-Agent": "GrandLineVault/0.1 card code search",
+            },
+            body: JSON.stringify({
+              from: offset,
+              size: 50,
+              filters: {
+                term: {
+                  setName: [set.name],
+                  productTypeName: ["Cards"],
+                },
+              },
+            }),
+          },
+          "TCGplayer card search could not be reached",
+        );
+        const page = searchResponseSchema.parse(payload).results[0];
+        if (!page) break;
+
+        totalResults = page.totalResults;
+        for (const product of page.results) {
+          const number =
+            attributeText(product.customAttributes, "number") ??
+            attributeText(product.formattedAttributes, "Number");
+          if (
+            product.productLineName === "One Piece Card Game" &&
+            product.setName === set.name &&
+            number?.toUpperCase() === code
+          ) {
+            productIds.add(product.productId);
+          }
+        }
+        offset += 50;
+      }
+    }
+
+    const ids = [...productIds];
+    const settledResults = await Promise.allSettled(
+      ids.map((productId) =>
+        this.importProduct(`https://www.tcgplayer.com/product/${productId}`),
+      ),
+    );
+    const results: TcgplayerImportResult[] = [];
+    const warnings: string[] = [];
+    for (const [index, settled] of settledResults.entries()) {
+      if (settled.status === "fulfilled") {
+        results.push(settled.value);
+      } else {
+        const productId = ids[index];
+        console.warn(
+          `Skipping TCGplayer product ${productId} during card search`,
+          settled.reason,
+        );
+        warnings.push(
+          `Skipped product ${productId} because its details were unavailable.`,
+        );
+      }
+    }
+    results.sort(
+      (left, right) =>
+        left.item.setName.localeCompare(right.item.setName) ||
+        left.item.name.localeCompare(right.item.name) ||
+        (left.item.source?.productId ?? 0) -
+          (right.item.source?.productId ?? 0),
+    );
+
+    return { code, results, warnings };
+  }
+
+  async downloadImage(
+    imageUrl: string,
+    expectedProductId: number,
+  ): Promise<ImageUpload> {
     const parsed = this.parseImageUrl(imageUrl);
     const productId = parsed.pathname.match(/\/product\/(\d+)/)?.[1];
     if (!productId || Number(productId) !== expectedProductId) {
       throw new AppError(
         400,
-        'tcgplayer_image_mismatch',
-        'The imported image does not belong to the selected TCGplayer product',
+        "tcgplayer_image_mismatch",
+        "The imported image does not belong to the selected TCGplayer product",
       );
     }
     let response: Response;
@@ -357,41 +584,46 @@ export class TcgplayerClient {
     try {
       response = await this.fetchImplementation(parsed.toString(), {
         headers: {
-          Accept: 'image/jpeg,image/png,image/webp',
-          'User-Agent': 'GrandLineVault/0.1 local collection importer',
+          Accept: "image/jpeg,image/png,image/webp",
+          "User-Agent": "GrandLineVault/0.1 local collection importer",
         },
-        redirect: 'error',
+        redirect: "error",
         signal: AbortSignal.timeout(15_000),
       });
     } catch (error) {
-      console.error('TCGplayer image request failed', error);
+      console.error("TCGplayer image request failed", error);
       throw new AppError(
         502,
-        'tcgplayer_image_unavailable',
-        'TCGplayer image could not be downloaded',
+        "tcgplayer_image_unavailable",
+        "TCGplayer image could not be downloaded",
       );
     }
 
     if (!response.ok || !response.body) {
       throw new AppError(
         502,
-        'tcgplayer_image_unavailable',
+        "tcgplayer_image_unavailable",
         `TCGplayer image returned status ${response.status}`,
       );
     }
 
-    const mimeType = response.headers.get('content-type')?.split(';')[0]?.trim() ?? '';
+    const mimeType =
+      response.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
     if (!supportedImageTypes.has(mimeType)) {
       throw new AppError(
         502,
-        'tcgplayer_image_type',
-        'TCGplayer returned an unsupported image type',
+        "tcgplayer_image_type",
+        "TCGplayer returned an unsupported image type",
       );
     }
 
-    const declaredLength = Number(response.headers.get('content-length') ?? 0);
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
     if (declaredLength > this.maxImageBytes) {
-      throw new AppError(400, 'image_too_large', 'The TCGplayer image exceeds the upload limit');
+      throw new AppError(
+        400,
+        "image_too_large",
+        "The TCGplayer image exceeds the upload limit",
+      );
     }
 
     const reader = response.body.getReader();
@@ -404,12 +636,21 @@ export class TcgplayerClient {
       size += result.value.byteLength;
       if (size > this.maxImageBytes) {
         await reader.cancel();
-        throw new AppError(400, 'image_too_large', 'The TCGplayer image exceeds the upload limit');
+        throw new AppError(
+          400,
+          "image_too_large",
+          "The TCGplayer image exceeds the upload limit",
+        );
       }
       chunks.push(Buffer.from(result.value));
     }
 
-    const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const extension =
+      mimeType === "image/png"
+        ? "png"
+        : mimeType === "image/webp"
+          ? "webp"
+          : "jpg";
     return {
       originalname: `${productId}.${extension}`,
       mimetype: mimeType,
@@ -423,22 +664,56 @@ export class TcgplayerClient {
     try {
       parsed = new URL(imageUrl);
     } catch {
-      throw new AppError(400, 'invalid_remote_image', 'The imported image URL is invalid');
+      throw new AppError(
+        400,
+        "invalid_remote_image",
+        "The imported image URL is invalid",
+      );
     }
 
     if (
-      parsed.protocol !== 'https:' ||
-      parsed.hostname !== 'tcgplayer-cdn.tcgplayer.com' ||
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "tcgplayer-cdn.tcgplayer.com" ||
       parsed.port ||
-      !/^\/product\/\d+(?:_\d+)?_in_\d+x\d+\.(?:jpg|jpeg|png|webp)$/i.test(parsed.pathname)
+      !/^\/product\/\d+(?:_\d+)?_in_\d+x\d+\.(?:jpg|jpeg|png|webp)$/i.test(
+        parsed.pathname,
+      )
     ) {
       throw new AppError(
         400,
-        'invalid_remote_image',
-        'Only TCGplayer product CDN images can be imported',
+        "invalid_remote_image",
+        "Only TCGplayer product CDN images can be imported",
       );
     }
 
     return parsed;
+  }
+
+  private async fetchJson(
+    url: string,
+    init: RequestInit,
+    unavailableMessage: string,
+  ): Promise<unknown> {
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(url, {
+        ...init,
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error) {
+      console.error("TCGplayer request failed", error);
+      throw new AppError(502, "tcgplayer_unavailable", unavailableMessage);
+    }
+
+    if (!response.ok) {
+      throw new AppError(
+        502,
+        "tcgplayer_request_failed",
+        `TCGplayer returned status ${response.status}`,
+      );
+    }
+
+    return response.json();
   }
 }
